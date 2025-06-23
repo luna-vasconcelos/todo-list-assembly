@@ -9,7 +9,9 @@
 # (1.2. Variáveis simples)
 .data
 
+# (1.3. Variável tipo array)
 taskList:   .space 1360     # Aloca espaço para 10 tarefas
+
 taskCount:  .word 0         # Contador de tarefas, inicia em 0
 
 menuHdr: .asciiz "\nMenu - To-do list:\n"
@@ -46,7 +48,6 @@ _done_header:   .asciiz "\nTarefas concluídas:\nPrioridade | Descrição\n"
 _done_no_tasks: .asciiz "\nNenhuma tarefa concluída ainda.\n"
 
 # casos da jump table
-# (1.3. Variável tipo array)
 jumpTable:
     .word do_add, do_list, do_mark, do_sort, do_done, do_exit
 
@@ -75,7 +76,6 @@ menu_loop:
     bgt  $t0, 6, invalid     # (branch greater than) if (op > 6)  goto invalid
 
     # jump table: busca handler correspondente 
-    # TODO: checar com o Camilo se isso é válido ou se ele só quer if-else
     addi $t1, $t0, -1        # (add immediate) converte 1-based em 0-based
     sll  $t1, $t1, 2         # (shift left logical) índice ×4 (byte offset)
     la   $t2, jumpTable       # (load address) base da tabela
@@ -93,8 +93,9 @@ invalid:
     j   menu_loop
 
 
-# FUNÇÕES PRINCIPAIS DO PROGRAMA:
-# Imprime msg1 e devolve 0 em $v0 para continuar no menu.
+############### FUNÇÕES PRINCIPAIS DO PROGRAMA ###############
+
+# do_add: Função para adicionar novas tarefas
 do_add:
     # Prólogo: Salva registradores que serão modificados
     addi $sp, $sp, -8       # Aloca 8 bytes na pilha
@@ -161,12 +162,13 @@ _add_exit:
     jr   $ra                # Retorna para o loop principal
 
 
+# do_list: Função para listar as tarefas por ordem de adição
 do_list:
     li $v0, 4
     la $a0, msg2
     syscall
     
-    # Implementação básica - pode ser melhorada
+    # Implementação básica
     lw $t0, taskCount
     beqz $t0, _list_empty
     
@@ -206,13 +208,97 @@ _list_exit:
     li $v0, 0
     jr $ra
 
+# do_mark: Marcar as tarefas disponíveis como concluídas, mostra as tarefas disponíveis não concluídas para marcar e dá a opção de escolha para marcação
 do_mark:
+    addi $sp, $sp, -12
+    sw $ra, 8($sp)
+    sw $s0, 4($sp)
+    sw $s1, 0($sp)
+
     li $v0, 4
     la $a0, msg3
     syscall
+
+    # Verificar se há tarefas
+    lw $t0, taskCount
+    beqz $t0, _mark_no_tasks
+
+    # Mostrar lista de tarefas não concluídas
+    li $v0, 4
+    la $a0, _mark_prompt
+    syscall
+
+    la $s0, taskList        # Carregar início da lista de tarefas
+    li $s1, 0               # Contador de tarefas
+
+_mark_list_loop:
+    lw $t1, TASK_STATUS_OFFSET($s0)
+    bnez $t1, _mark_skip    # Pular tarefas já concluídas
+
+    # Mostrar índice da tarefa
+    li $v0, 1
+    move $a0, $s1
+    syscall
+
+    # Mostrar separador
+    li $v0, 4
+    la $a0, _separator
+    syscall
+
+    # Mostrar descrição
+    move $a0, $s0
+    syscall
+
+_mark_skip:
+    addi $s0, $s0, TASK_STRUCT_SIZE
+    addi $s1, $s1, 1
+    blt $s1, $t0, _mark_list_loop
+
+    # Pedir índice da tarefa a marcar
+    li $v0, 4
+    la $a0, _mark_index_prompt
+    syscall
+    li $v0, 5
+    syscall
+
+    # Validar índice
+    bltz $v0, _mark_invalid
+    lw $t0, taskCount
+    bge $v0, $t0, _mark_invalid
+
+    # Marcar tarefa como concluída
+    li $t1, TASK_STRUCT_SIZE
+    mul $t1, $v0, $t1
+    la $t0, taskList
+    add $t0, $t0, $t1
+    li $t1, 1
+    sw $t1, TASK_STATUS_OFFSET($t0)
+
+    li $v0, 4
+    la $a0, _mark_success
+    syscall
+    j _mark_exit
+
+_mark_invalid:
+    li $v0, 4
+    la $a0, _mark_invalid_msg
+    syscall
+    j _mark_exit
+
+_mark_no_tasks:
+    li $v0, 4
+    la $a0, _empty_msg
+    syscall
+
+_mark_exit:
+    lw $s1, 0($sp)
+    lw $s0, 4($sp)
+    lw $ra, 8($sp)
+    addi $sp, $sp, 12
     li $v0, 0
     jr $ra
 
+# do_sort: Função para ordenar as tarefas que já foram adicionadas por ordem de prioridade
 do_sort:
     addi $sp, $sp, -24
     sw $ra, 20($sp)
@@ -314,3 +400,4 @@ do_exit:
     syscall
     li  $v0, 1             # devolve ≠0 = main encerra
     jr  $ra
+
