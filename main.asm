@@ -6,11 +6,10 @@
 .eqv TASK_STATUS_OFFSET 132 # Deslocamento para o campo 'status'
 .eqv TASK_STRUCT_SIZE 136    # Tamanho total da struct da tarefa
 
-# (1.2. Variáveis simples)
 .data
     # (1.3. Variável tipo array)
     taskList:   .space 1360     # Aloca espaço para 10 tarefas
-
+    # (1.2. Variáveis simples)
     taskCount:  .word 0         # Contador de tarefas, inicia em 0
 
     menuHdr: .asciiz "\nMenu - To-do list:\n"
@@ -23,7 +22,7 @@
     promptPrio: .asciiz "Digite a prioridade da tarefa (ex: 1 a 5): "
     msgSuccess: .asciiz "\nTarefa adicionada com sucesso!\n"
     msgListFull:.asciiz "\nERRO: A lista de tarefas está cheia!\n"
-
+    # (1.2. Variáveis simples)
     msg1: .asciiz "\nVocê escolheu a opção 1 (Adicionar)…\n"
     msg2: .asciiz "\nVocê escolheu a opção 2 (Listar)…\n"
     msg3: .asciiz "\nVocê escolheu a opção 3 (Marcar concluída)…\n"
@@ -54,21 +53,22 @@
 main:
 menu_loop:
     # imprime todo o menu de uma vez 
+    # (1.9. Saída de valores inteiros para o usuário)
     li  $v0, 4               # syscall: print_string
     la  $a0, menuHdr         # cabeçalho
     syscall
-    la  $a0, optTxt          # opções 1-6
+    la  $a0, optTxt          # opções 1-5
     syscall
     la  $a0, prompt          # prompt para que o usuário digite a escolha
     syscall
 
     # lê opção digitada do usuário 
-    # (1.1.)
+    # (1.1. Números inteiros recebidos por input do usuário)
     li  $v0, 5               # syscall: read_int
     syscall
     move $t0, $v0            # armazena em $t0 a opção
 
-    # realiza validação do range do menu (1‒6)
+    # realiza validação do range do menu (1‒5)
     # (1.4.: if)
     blt  $t0, 1, invalid     # (branch less than) if (op < 1)  goto invalid
     bgt  $t0, 6, invalid     # (branch greater than) if (op > 6)  goto invalid
@@ -79,8 +79,10 @@ menu_loop:
     la   $t2, jumpTable       # (load address) base da tabela
     addu $t2, $t2, $t1       # (add unsigned) endereço da word desejada
     lw   $t3, 0($t2)         # $t3 = endereço da função
+    # (1.6. Chamada de funções com parâmetro de retorno)
     jalr $t3                 # (jump and link register) chama a função
-    beq  $v0, $zero, menu_loop   # enquanto retorno==0 = repete menu (loop: 1.5. Estrutura de repetição)
+    # (1.5. Estrutura de repetição)
+    beq  $v0, $zero, menu_loop   # enquanto retorno==0 = repete menu
     li   $v0, 10             # retorno !=0 = sair
     syscall
 
@@ -126,6 +128,7 @@ do_add:
     li   $v0, 4
     la   $a0, promptPrio
     syscall
+    # (1.1 Números inteiros recebidos por input do usuário)
     li   $v0, 5             # Syscall para ler um inteiro
     syscall                 # O inteiro lido está em $v0
 
@@ -240,6 +243,7 @@ print_task_rec:
     move $a0, $t0
     syscall
 
+    # (1.7. Recursão)
     # chamada recursiva
     li   $t1, TASK_STRUCT_SIZE
     add  $a0, $t0, $t1              # próximo endereço
@@ -261,7 +265,7 @@ do_mark:
     sw $ra, 8($sp)
     sw $s0, 4($sp)
     sw $s1, 0($sp)
-
+    # (1.9. Saída de valores inteiros para o usuário)
     li $v0, 4
     la $a0, msg3
     syscall
@@ -277,7 +281,7 @@ do_mark:
 
     la $s0, taskList        # Carregar início da lista de tarefas
     li $s1, 0               # Contador de tarefas
-
+# (1.5. Estrutura de repetição)
 _mark_list_loop:
     lw $t1, TASK_STATUS_OFFSET($s0)
     bnez $t1, _mark_skip    # Pular tarefas já concluídas
@@ -302,6 +306,7 @@ _mark_skip:
     blt $s1, $t0, _mark_list_loop
 
     # Pedir índice da tarefa a marcar
+    # (1.9. Saída de valores inteiros para o usuário)
     li $v0, 4
     la $a0, _mark_index_prompt
     syscall
@@ -309,6 +314,7 @@ _mark_skip:
     syscall
 
     # Validar índice
+    # (1.4. Estrutura condicional composta (if, else if e else))
     bltz $v0, _mark_invalid
     lw $t0, taskCount
     bge $v0, $t0, _mark_invalid
@@ -346,6 +352,7 @@ _mark_exit:
     jr $ra
 
 # do_sort: Função para ordenar as tarefas que já foram adicionadas por ordem de prioridade
+# (1.8. Ordenação de valores em array)
 do_sort:
     addi $sp, $sp, -24
     sw $ra, 20($sp)
@@ -439,4 +446,5 @@ do_exit:
     la $a0, msg6 
     syscall
     li  $v0, 1             # devolve ≠0 = main encerra
+    # (1.6. Chamada de funções com parâmetro de retorno)
     jr  $ra
