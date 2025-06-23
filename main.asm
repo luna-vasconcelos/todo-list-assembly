@@ -8,48 +8,46 @@
 
 # (1.2. Variáveis simples)
 .data
+    # (1.3. Variável tipo array)
+    taskList:   .space 1360     # Aloca espaço para 10 tarefas
 
-# (1.3. Variável tipo array)
-taskList:   .space 1360     # Aloca espaço para 10 tarefas
+    taskCount:  .word 0         # Contador de tarefas, inicia em 0
 
-taskCount:  .word 0         # Contador de tarefas, inicia em 0
+    menuHdr: .asciiz "\nMenu - To-do list:\n"
+    optTxt:  .asciiz "  1) Adicionar tarefa\n  2) Listar tarefas\n  3) Marcar tarefa como concluída\n  4) Ordenar tarefas por prioridade\n  5) Sair\n"
+    prompt:  .asciiz "Sua escolha (1-5): "
+    badOpt:  .asciiz "\nOpção inválida — tente de novo.\n"
+    newline: .asciiz "\n"
 
-menuHdr: .asciiz "\nMenu - To-do list:\n"
-optTxt:  .asciiz "  1) Adicionar tarefa\n  2) Listar tarefas\n  3) Marcar tarefa como concluída\n  4) Ordenar tarefas por prioridade\n  5) Mostrar tarefas concluídas\n  6) Sair\n"
-prompt:  .asciiz "Sua escolha (1-6): "
-badOpt:  .asciiz "\nOpção inválida — tente de novo.\n"
-newline: .asciiz "\n"
+    promptDesc: .asciiz "Digite a descrição da tarefa: "
+    promptPrio: .asciiz "Digite a prioridade da tarefa (ex: 1 a 5): "
+    msgSuccess: .asciiz "\nTarefa adicionada com sucesso!\n"
+    msgListFull:.asciiz "\nERRO: A lista de tarefas está cheia!\n"
 
-promptDesc: .asciiz "Digite a descrição da tarefa: "
-promptPrio: .asciiz "Digite a prioridade da tarefa (ex: 1 a 5): "
-msgSuccess: .asciiz "\nTarefa adicionada com sucesso!\n"
-msgListFull:.asciiz "\nERRO: A lista de tarefas está cheia!\n"
+    msg1: .asciiz "\nVocê escolheu a opção 1 (Adicionar)…\n"
+    msg2: .asciiz "\nVocê escolheu a opção 2 (Listar)…\n"
+    msg3: .asciiz "\nVocê escolheu a opção 3 (Marcar concluída)…\n"
+    msg4: .asciiz "\nVocê escolheu a opção 4 (Ordenar)…\n"
+    msg6: .asciiz "\nEncerrando o programa…\n"
 
-msg1: .asciiz "\nVocê escolheu a opção 1 (Adicionar)…\n"
-msg2: .asciiz "\nVocê escolheu a opção 2 (Listar)…\n"
-msg3: .asciiz "\nVocê escolheu a opção 3 (Marcar concluída)…\n"
-msg4: .asciiz "\nVocê escolheu a opção 4 (Ordenar)…\n"
-msg5: .asciiz "\nVocê escolheu a opção 5 (Concluídas)…\n"
-msg6: .asciiz "\nEncerrando o programa…\n"
+    # List display
+    _list_header: .asciiz "\nLista de tarefas:\nPrioridade | Status | Descrição\n"
+    _separator: .asciiz " | "
+    _empty_msg: .asciiz "Nenhuma tarefa para mostrar.\n"
 
-# List display
-_list_header: .asciiz "\nLista ordenada por prioridade:\nPrioridade | Descrição\n"
-_separator: .asciiz " | "
-_empty_msg: .asciiz "Nenhuma tarefa para mostrar.\n"
+    # Marcar como concluída
+    _mark_prompt:       .asciiz "\nTarefas disponíveis para marcar como concluídas:\n"
+    _mark_index_prompt: .asciiz "\nDigite o número da tarefa a marcar como concluída: "
+    _mark_success:      .asciiz "\nTarefa marcada como concluída com sucesso!\n"
+    _mark_invalid_msg:  .asciiz "\nÍndice inválido!\n"
 
-#Marcar como concluída
-_mark_prompt:       .asciiz "\nTarefas disponíveis para marcar como concluídas:\n"
-_mark_index_prompt: .asciiz "\nDigite o número da tarefa a marcar como concluída: "
-_mark_success:      .asciiz "\nTarefa marcada como concluída com sucesso!\n"
-_mark_invalid_msg:  .asciiz "\nÍndice inválido!\n"
+    # casos da jump table
+    jumpTable:
+        .word do_add, do_list, do_mark, do_sort, do_exit
 
-#Lista as tarefas concluídas
-_done_header:   .asciiz "\nTarefas concluídas:\nPrioridade | Descrição\n"
-_done_no_tasks: .asciiz "\nNenhuma tarefa concluída ainda.\n"
-
-# casos da jump table
-jumpTable:
-    .word do_add, do_list, do_mark, do_sort, do_done, do_exit
+    # Definições de status da tarefa
+    _status_done:    .asciiz "Concluída"
+    _status_pending: .asciiz "Pendente"
 
 .text
 .globl main
@@ -162,51 +160,100 @@ _add_exit:
     jr   $ra                # Retorna para o loop principal
 
 
-# do_list: Função para listar as tarefas por ordem de adição
+# do_list: lista as tarefas sem ordem pre determinada
 do_list:
-    li $v0, 4
-    la $a0, msg2
-    syscall
-    
-    # Implementação básica
-    lw $t0, taskCount
-    beqz $t0, _list_empty
-    
-    la $t1, taskList
-    li $v0, 4
-    la $a0, _list_header
+    addi $sp, $sp, -8        # prólogo: reserva espaço
+    sw   $ra, 4($sp)         # salva endereço de retorno do menu
+    sw   $s0, 0($sp)         # (opcional) se precisar de um saved-reg
+
+    li   $v0, 4
+    la   $a0, msg2
     syscall
 
-_list_loop:
-    li $v0, 1
-    lw $a0, TASK_PRIO_OFFSET($t1)
+    lw   $t0, taskCount
+    beqz $t0, _list_empty
+
+    li   $v0, 4
+    la   $a0, _list_header
     syscall
-    
-    li $v0, 4
-    la $a0, _separator
-    syscall
-    
-    li $v0, 4
-    move $a0, $t1
-    syscall
-    
-    li $v0, 4
-    la $a0, newline
-    syscall
-    
-    addi $t1, $t1, TASK_STRUCT_SIZE
-    addi $t0, $t0, -1
-    bgtz $t0, _list_loop
-    j _list_exit
+
+    la   $a0, taskList       # primeiro item
+    move $a1, $t0            # nº de tarefas
+    jal  print_task_rec      # $ra é alterado aqui
+
+    j    _list_exit
 
 _list_empty:
-    li $v0, 4
-    la $a0, _empty_msg
+    li   $v0, 4
+    la   $a0, _empty_msg
     syscall
 
 _list_exit:
-    li $v0, 0
-    jr $ra
+    li   $v0, 0              # devolve 0 p/ continuar no menu
+    lw   $s0, 0($sp)         # restaura registradores salvos
+    lw   $ra, 4($sp)
+    addi $sp, $sp, 8
+    jr   $ra                 # volta ao menu
+# print_task_rec  —  imprime tarefas de forma recursiva
+# Entradas:
+#   $a0 = endereço da tarefa atual
+#   $a1 = número de tarefas restantes a exibir
+print_task_rec:
+    beqz $a1, _print_base      # se não há tarefas, sai limpo
+    # ---------- PRÓLOGO ----------
+    addi $sp, $sp, -12
+    sw   $ra, 8($sp)
+    sw   $t0, 4($sp)
+    sw   $t1, 0($sp)
+    # ---------- CORPO ----------
+    move $t0, $a0                   # ponteiro para a struct atual
+    
+    # ---- imprimir prioridade ----
+    lw   $t1, TASK_PRIO_OFFSET($t0)
+    li   $v0, 1
+    move $a0, $t1
+    syscall
+
+    # separador " | "
+    li   $v0, 4
+    la   $a0, _separator
+    syscall
+
+    # ---- imprimir status ----
+    lw   $t2, TASK_STATUS_OFFSET($t0)  # 0 = pendente, 1 = concluído
+    beq  $t2, $zero, _print_stat_pending
+    la   $a0, _status_done             # status = 1 → concluída
+    j    _print_stat_print
+    _print_stat_pending:
+    la   $a0, _status_pending          # status = 0 → pendente
+    _print_stat_print:
+    li   $v0, 4
+    syscall
+
+    # separador " | "
+    li   $v0, 4
+    la   $a0, _separator
+    syscall
+
+    # ---- imprimir descrição ----
+    li   $v0, 4
+    move $a0, $t0
+    syscall
+
+    # chamada recursiva
+    li   $t1, TASK_STRUCT_SIZE
+    add  $a0, $t0, $t1              # próximo endereço
+    addi $a1, $a1, -1               # tarefas_restantes--
+    jal  print_task_rec
+
+    # ---------- EPÍLOGO ----------
+    lw   $t1, 0($sp)
+    lw   $t0, 4($sp)
+    lw   $ra, 8($sp)
+    addi $sp, $sp, 12
+    jr   $ra
+_print_base:                         # caso-base sem frame
+    jr   $ra
 
 # do_mark: Marcar as tarefas disponíveis como concluídas, mostra as tarefas disponíveis não concluídas para marcar e dá a opção de escolha para marcação
 do_mark:
@@ -387,17 +434,9 @@ _copy_loop:
 _copy_end:
     jr $ra
 
-do_done:
-    li  $v0, 4 
-    la $a0, msg5 
-    syscall
-    li  $v0, 0
-    jr  $ra
-
 do_exit:
     li  $v0, 4 
     la $a0, msg6 
     syscall
     li  $v0, 1             # devolve ≠0 = main encerra
     jr  $ra
-
