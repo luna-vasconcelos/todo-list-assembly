@@ -30,6 +30,21 @@ msg4: .asciiz "\nVocê escolheu a opção 4 (Ordenar)…\n"
 msg5: .asciiz "\nVocê escolheu a opção 5 (Concluídas)…\n"
 msg6: .asciiz "\nEncerrando o programa…\n"
 
+# List display
+_list_header: .asciiz "\nLista ordenada por prioridade:\nPrioridade | Descrição\n"
+_separator: .asciiz " | "
+_empty_msg: .asciiz "Nenhuma tarefa para mostrar.\n"
+
+#Marcar como concluída
+_mark_prompt:       .asciiz "\nTarefas disponíveis para marcar como concluídas:\n"
+_mark_index_prompt: .asciiz "\nDigite o número da tarefa a marcar como concluída: "
+_mark_success:      .asciiz "\nTarefa marcada como concluída com sucesso!\n"
+_mark_invalid_msg:  .asciiz "\nÍndice inválido!\n"
+
+#Lista as tarefas concluídas
+_done_header:   .asciiz "\nTarefas concluídas:\nPrioridade | Descrição\n"
+_done_no_tasks: .asciiz "\nNenhuma tarefa concluída ainda.\n"
+
 # casos da jump table
 # (1.3. Variável tipo array)
 jumpTable:
@@ -144,26 +159,147 @@ _add_exit:
 
     li   $v0, 0             # Retorna 0 para que o menu continue
     jr   $ra                # Retorna para o loop principal
+
+
 do_list:
-    li  $v0, 4
+    li $v0, 4
     la $a0, msg2
     syscall
-    li  $v0, 0
-    jr  $ra
+    
+    # Implementação básica - pode ser melhorada
+    lw $t0, taskCount
+    beqz $t0, _list_empty
+    
+    la $t1, taskList
+    li $v0, 4
+    la $a0, _list_header
+    syscall
+
+_list_loop:
+    li $v0, 1
+    lw $a0, TASK_PRIO_OFFSET($t1)
+    syscall
+    
+    li $v0, 4
+    la $a0, _separator
+    syscall
+    
+    li $v0, 4
+    move $a0, $t1
+    syscall
+    
+    li $v0, 4
+    la $a0, newline
+    syscall
+    
+    addi $t1, $t1, TASK_STRUCT_SIZE
+    addi $t0, $t0, -1
+    bgtz $t0, _list_loop
+    j _list_exit
+
+_list_empty:
+    li $v0, 4
+    la $a0, _empty_msg
+    syscall
+
+_list_exit:
+    li $v0, 0
+    jr $ra
 
 do_mark:
-    li  $v0, 4 
-    la $a0, msg3 
+    li $v0, 4
+    la $a0, msg3
     syscall
-    li  $v0, 0
-    jr  $ra
+    li $v0, 0
+    jr $ra
 
 do_sort:
-    li  $v0, 4 
-    la $a0, msg4 
+    addi $sp, $sp, -24
+    sw $ra, 20($sp)
+    sw $s0, 16($sp)
+    sw $s1, 12($sp)
+    sw $s2, 8($sp)
+    sw $s3, 4($sp)
+    sw $s4, 0($sp)
+
+    li $v0, 4
+    la $a0, msg4
     syscall
-    li  $v0, 0
-    jr  $ra
+
+    lw $t0, taskCount
+    ble $t0, 1, _sort_end
+
+    li $s0, 0
+    addi $s1, $t0, -1
+    la $s2, taskList
+
+_sort_outer:
+    bge $s0, $s1, _sort_end
+
+    li $s3, 0
+    sub $s4, $s1, $s0
+
+_sort_inner:
+    bge $s3, $s4, _sort_next_outer
+
+    mul $t1, $s3, TASK_STRUCT_SIZE
+    add $t2, $s2, $t1
+    addi $t3, $t1, TASK_STRUCT_SIZE
+    add $t3, $s2, $t3
+
+    lw $t4, TASK_PRIO_OFFSET($t2)
+    lw $t5, TASK_PRIO_OFFSET($t3)
+    ble $t4, $t5, _sort_no_swap
+
+    move $a0, $t2
+    addi $a1, $sp, 24
+    li $a2, TASK_STRUCT_SIZE
+    jal _copy_memory
+
+    move $a0, $t3
+    move $a1, $t2
+    li $a2, TASK_STRUCT_SIZE
+    jal _copy_memory
+
+    addi $a0, $sp, 24
+    move $a1, $t3
+    li $a2, TASK_STRUCT_SIZE
+    jal _copy_memory
+
+_sort_no_swap:
+    addi $s3, $s3, 1
+    j _sort_inner
+
+_sort_next_outer:
+    addi $s0, $s0, 1
+    j _sort_outer
+
+_sort_end:
+    # Mostra lista ordenada
+    jal do_list
+
+    lw $s4, 0($sp)
+    lw $s3, 4($sp)
+    lw $s2, 8($sp)
+    lw $s1, 12($sp)
+    lw $s0, 16($sp)
+    lw $ra, 20($sp)
+    addi $sp, $sp, 24
+    li $v0, 0
+    jr $ra
+
+_copy_memory:
+    li $t9, 0
+_copy_loop:
+    bge $t9, $a2, _copy_end
+    lb $t8, 0($a0)
+    sb $t8, 0($a1)
+    addi $a0, $a0, 1
+    addi $a1, $a1, 1
+    addi $t9, $t9, 1
+    j _copy_loop
+_copy_end:
+    jr $ra
 
 do_done:
     li  $v0, 4 
